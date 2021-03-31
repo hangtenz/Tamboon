@@ -45,6 +45,7 @@ func main() {
 		env           *config.Env
 		delimiter     = byte('\n')
 		countDonation = CountDonation{}
+		record        []string
 	)
 
 	//TODO: manual config key
@@ -76,7 +77,7 @@ func main() {
 			}
 			log.Error(err)
 		}
-		record := strings.Split(strings.TrimSpace(string(data)), ",")
+		record = strings.Split(strings.TrimSpace(string(data)), ",")
 		if record[0] == "Name" { //skip header
 			continue
 		}
@@ -85,7 +86,7 @@ func main() {
 		wg.Add(1)
 		go perform(ctx, usecase, &donationByCustomer, &countDonation)
 	}
-
+	helper.Clear(&record)
 	wg.Wait()
 	display(&countDonation, donationByCustomer)
 }
@@ -122,6 +123,8 @@ func perform(ctx context.Context, usecase *tamboon.Usecase, donation *map[string
 		(countDonation.sucessDonation) += c.AmountSubunits
 	}
 	(countDonation.totalDonation) += c.AmountSubunits
+	//Clear memmory of customer
+	helper.Clear(&c)
 }
 
 func display(countDonation *CountDonation, donationByCustomer map[string]int64) {
