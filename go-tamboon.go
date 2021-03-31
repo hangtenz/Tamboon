@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Rhymond/go-money"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -124,16 +125,15 @@ func perform(ctx context.Context, usecase *tamboon.Usecase, donation *map[string
 }
 
 func display(countDonation *CountDonation, donationByCustomer map[string]int64) {
-	//TODO: fix show money
 	//Display top donation
 	fmt.Println("done.")
-	fmt.Println("total received: THB ", countDonation.totalDonation)
-	fmt.Println("successfully donated: THB ", countDonation.sucessDonation)
-	fmt.Println("faulty donation: THB ", countDonation.failDonation)
+	fmt.Println("total received:", money.New(countDonation.totalDonation, "THB").Display())
+	fmt.Println("successfully donated:", money.New(countDonation.sucessDonation, "THB").Display())
+	fmt.Println("faulty donation:", money.New(countDonation.failDonation, "THB").Display())
 	if len(donationByCustomer) == 0 {
 		return
 	}
-	fmt.Println("average per person: THB ", int(countDonation.sucessDonation)/len(donationByCustomer))
+	fmt.Println("average per person: THB", money.New(countDonation.sucessDonation/int64(len(donationByCustomer)), "THB").Display())
 
 	ListDonation := entity.Donations{}
 	for customerName, totalperCustomer := range donationByCustomer {
