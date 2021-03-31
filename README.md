@@ -13,6 +13,6 @@ $ go install -v .
 
 $ $GOPATH/bin/go-tamboon /path/to/test.csv
 
-$ $GOPATH/bin/go-tamboon/data/fng.1000.csv.rot128
+$ $GOPATH/bin/go-tamboon ./data/fng.1000.csv.rot128
 
 ```
