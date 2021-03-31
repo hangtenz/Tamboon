@@ -99,7 +99,7 @@ func perform(ctx context.Context, usecase *tamboon.Usecase, donation *map[string
 	c := <-customerChan
 	err = usecase.Tamboon(ctx, c)
 	if err != nil {
-		//ถ้าเจอ error ให้เพิ่มเวลาใน timeTick ทีละ 10 ms
+		//ถ้าเจอ error ให้ลดความเร็วลง 10 ms
 		if strings.Contains(err.Error(), "API rate limit has been exceeded") {
 			rateMultiple += 10
 			rateLimit = time.Tick(time.Duration(rateMultiple) * time.Millisecond)
