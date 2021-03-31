@@ -99,12 +99,19 @@ func perform(ctx context.Context, usecase *tamboon.Usecase, donation *map[string
 	c := <-customerChan
 	err = usecase.Tamboon(ctx, c)
 	if err != nil {
-		//ถ้าเจอ error ให้เพิ่มเวลาใน timeTick ทีละ 100 ms
-		rateMultiple += 100
-		rateLimit = time.Tick(time.Duration(rateMultiple) * time.Millisecond)
+		//ถ้าเจอ error ให้เพิ่มเวลาใน timeTick ทีละ 10 ms
+		if strings.Contains(err.Error(), "API rate limit has been exceeded") {
+			rateMultiple += 10
+			rateLimit = time.Tick(time.Duration(rateMultiple) * time.Millisecond)
+		}
 		(countDonation.failDonation) += c.AmountSubunits
 		log.Errorf("Failed when create transaction with customer %v get error %v", c.Name, err)
 	} else {
+		//ถ้าไม่เจอ error เลยลองเพิ่มความเร็ว 10 ms
+		if rateMultiple-10 >= 0 {
+			rateMultiple -= 10
+			rateLimit = time.Tick(time.Duration(rateMultiple) * time.Millisecond)
+		}
 		v, have := (*donation)[c.Name]
 		if !have {
 			(*donation)[c.Name] = c.AmountSubunits
