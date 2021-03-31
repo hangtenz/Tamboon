@@ -14,28 +14,41 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
 
+type CountDonation struct {
+	totalDonation  int64
+	sucessDonation int64
+	failDonation   int64
+}
+
+var (
+	rateMultiple = 1
+	rateLimit    = time.Tick(time.Duration(rateMultiple) * time.Millisecond)
+	customerChan = make(chan entity.Customer, 2) //Default goroutine is 2
+	wg           sync.WaitGroup
+)
+
 func main() {
 	var (
-		fileName       string
-		file           *os.File
-		reader         *cipher.Rot128Reader
-		customer       entity.Customer
-		ctx            = context.Background()
-		err            error
-		usecase        *tamboon.Usecase
-		wg             sync.WaitGroup
-		env            *config.Env
-		delimiter      = byte('\n')
-		totalDonation  = int64(0)
-		sucessDonation = int64(0)
-		failDonation   = int64(0)
+		fileName      string
+		file          *os.File
+		reader        *cipher.Rot128Reader
+		customer      entity.Customer
+		ctx           = context.Background()
+		err           error
+		usecase       *tamboon.Usecase
+		env           *config.Env
+		delimiter     = byte('\n')
+		countDonation = CountDonation{}
 	)
 
+	//TODO: manual config key
 	env = config.LoadDevEnv()
+	customerChan = make(chan entity.Customer, env.MaxGoRoutine)
 	usecase = tamboon.NewUsecase(env.OmisePublicKey, env.OmiseSecretKey)
 	if len(os.Args) < 2 {
 		fmt.Println("Usage:./tamboon [/path/to/file]")
@@ -50,7 +63,6 @@ func main() {
 	}
 	defer file.Close()
 
-	customerChan := make(chan entity.Customer, env.MaxGoRoutine)
 	donationByCustomer := make(map[string]int64)
 	reader, err = cipher.NewRot128Reader(*bufio.NewReader(file))
 	delimiter -= 128
@@ -70,22 +82,27 @@ func main() {
 		customer = entity.NewCustomer(record[0], helper.MustParseInt64(record[1]), record[2], record[3], helper.MustParseMonth(record[4]), helper.MustParseInt(record[5]))
 		customerChan <- customer
 		wg.Add(1)
-		go perform(ctx, usecase, &wg, &customerChan, &donationByCustomer, &failDonation, &sucessDonation, &totalDonation)
+		go perform(ctx, usecase, &donationByCustomer, &countDonation)
 	}
 
 	wg.Wait()
-	display(totalDonation, sucessDonation, failDonation, donationByCustomer)
+	display(&countDonation, donationByCustomer)
 }
 
-func perform(ctx context.Context, usecase *tamboon.Usecase, wg *sync.WaitGroup, customerChan *chan entity.Customer, donation *map[string]int64, failDonation *int64, sucessDonation *int64, totalDonation *int64) {
+func perform(ctx context.Context, usecase *tamboon.Usecase, donation *map[string]int64, countDonation *CountDonation) {
 	var (
 		err error
 	)
 	defer wg.Done()
-	c := <-(*customerChan)
+
+	<-rateLimit
+	c := <-customerChan
 	err = usecase.Tamboon(ctx, c)
 	if err != nil {
-		(*failDonation) += c.AmountSubunits
+		//ถ้าเจอ error ให้เพิ่มเวลาใน timeTick ทีละ 100 ms
+		rateMultiple += 100
+		rateLimit = time.Tick(time.Duration(rateMultiple) * time.Millisecond)
+		(countDonation.failDonation) += c.AmountSubunits
 		log.Errorf("Failed when create transaction with customer %v get error %v", c.Name, err)
 	} else {
 		v, have := (*donation)[c.Name]
@@ -94,21 +111,22 @@ func perform(ctx context.Context, usecase *tamboon.Usecase, wg *sync.WaitGroup, 
 		} else {
 			(*donation)[c.Name] = v + c.AmountSubunits
 		}
-		(*sucessDonation) += c.AmountSubunits
+		(countDonation.sucessDonation) += c.AmountSubunits
 	}
-	(*totalDonation) += c.AmountSubunits
+	(countDonation.totalDonation) += c.AmountSubunits
 }
 
-func display(totalDonation, sucessDonation, failDonation int64, donationByCustomer map[string]int64) {
+func display(countDonation *CountDonation, donationByCustomer map[string]int64) {
+	//TODO: fix show money
 	//Display top donation
 	fmt.Println("done.")
-	fmt.Println("total received: THB ", totalDonation)
-	fmt.Println("successfully donated: THB ", sucessDonation)
-	fmt.Println("faulty donation: THB ", failDonation)
+	fmt.Println("total received: THB ", countDonation.totalDonation)
+	fmt.Println("successfully donated: THB ", countDonation.sucessDonation)
+	fmt.Println("faulty donation: THB ", countDonation.failDonation)
 	if len(donationByCustomer) == 0 {
 		return
 	}
-	fmt.Println("average per person: THB ", int(sucessDonation)/len(donationByCustomer))
+	fmt.Println("average per person: THB ", int(countDonation.sucessDonation)/len(donationByCustomer))
 
 	ListDonation := entity.Donations{}
 	for customerName, totalperCustomer := range donationByCustomer {
